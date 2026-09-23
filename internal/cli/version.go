@@ -8,8 +8,8 @@ import (
 )
 
 var (
-	Version = "dev"
-	Commit = "none"
+	Version   = "dev"
+	Commit    = "none"
 	BuildDate = "unknown"
 )
 

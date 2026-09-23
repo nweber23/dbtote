@@ -8,19 +8,19 @@ import (
 )
 
 var (
-	cfgFile	string
-	logLevel	string
-	logFormat	string
-	noColor	bool
+	cfgFile   string
+	logLevel  string
+	logFormat string
+	noColor   bool
 )
 
 // NewRootCommand creates the root command for the CLI application.
 // It is a constructor so tests can create isolted instances without global flags
 func NewRootCommand() *cobra.Command {
 	root := &cobra.Command{
-		Use:	 "dbtote",
-		Short:	 "Backup and restore databases with compression, encryption, and cloud storage support",
-		SilenceUsage: true,
+		Use:           "dbtote",
+		Short:         "Backup and restore databases with compression, encryption, and cloud storage support",
+		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 	root.PersistentFlags().StringVar(&cfgFile, "config", "", "Path to config file (default: $XDG_CONFIG_HOME/dbtote/config.yaml)")
