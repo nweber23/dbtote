@@ -13,4 +13,4 @@ linters:
 
 issues:
   exclude-dirs:
-    -testdata
+    - testdata
