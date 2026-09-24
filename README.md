@@ -45,6 +45,57 @@ Requires the `mysqldump` and `mysql` client binaries on `PATH`.
      --host db.internal --user backup_svc --database app_production --decrypt-key identity.txt --yes
    ```
 
+## Config file
+
+Instead of passing `--host`/`--user`/`--database`/etc. on every command, define targets once in a YAML config file. CLI flags always override the config for that run.
+
+1. Write a starter config:
+
+   ```bash
+   dbtote config init
+   ```
+
+   Prompts for a local storage path and writes `$XDG_CONFIG_HOME/dbtote/config.yaml` (or `--config <path>`).
+
+2. Add a target under `targets:`, e.g.:
+
+   ```yaml
+   targets:
+     prod-mysql:
+       engine: mysql
+       host: db1.internal
+       port: 3306
+       user: backup_svc
+       database: app_production
+       storage: local-main
+   ```
+
+3. Validate the config — checks storage references, age recipient keys, cron expressions, and that every target's credential resolves (`password_env` or OS keyring), without connecting to any database:
+
+   ```bash
+   dbtote config validate
+   ```
+
+4. Check connectivity and credentials for a specific target:
+
+   ```bash
+   dbtote test-connection --target prod-mysql
+   ```
+
+5. List known backups:
+
+   ```bash
+   dbtote list
+   dbtote list --target prod-mysql --since 24h
+   dbtote list --json
+   ```
+
+With a config file in place, `dbtote backup --target prod-mysql` and `dbtote restore --target prod-mysql --from <file> --yes` resolve engine, host, port, user, database, storage, and encryption recipients from the target's config entry — pass any of `--host`/`--user`/`--database`/etc. explicitly to override just that field for one run.
+
+### PostgreSQL
+
+Postgres is supported the same way MySQL is — set `engine: postgres` on a target. Requires the `pg_dump` and `pg_restore` client binaries on `PATH`.
+
 ## Development
 
 ```bash
