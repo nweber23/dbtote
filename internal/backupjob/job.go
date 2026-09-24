@@ -76,30 +76,28 @@ func Run(ctx context.Context, opts Options, logger *slog.Logger) (Result, error)
 
 	pr, pw := io.Pipe()
 
-	// Build the write chain inside-out: the innermost writer is the pipe;
-	// wrapping it with encryption (if requested) then compression gives
-	// the outer writer the Backuper writes raw dump bytes into, so data
-	// flows dump -> compress -> encrypt -> pipe, matching the required
-	var closers []io.Closer
-	var target io.Writer = pw
-	if opts.Encrypt {
-		encWriter, err := crypto.NewEncryptWriter(pw, opts.Recipients)
-		if err != nil {
-			pw.Close()
-			return Result{}, fmt.Errorf("backupjob: encrypt writer: %w", err)
-		}
-		target = encWriter
-		closers = append(closers, encWriter)
-	}
-	compWriter, err := compress.NewWriter(opts.Compress, target)
-	if err != nil {
-		pw.Close()
-		return Result{}, fmt.Errorf("backupjob: compress writer: %w", err)
-	}
-	closers = append([]io.Closer{compWriter}, closers...) // compress closes (flushes) first, then encrypt
-
 	dumpErrCh := make(chan error, 1)
 	go func() {
+		var closers []io.Closer
+		var target io.Writer = pw
+		if opts.Encrypt {
+			encWriter, err := crypto.NewEncryptWriter(pw, opts.Recipients)
+			if err != nil {
+				pw.CloseWithError(err)
+				dumpErrCh <- fmt.Errorf("backupjob: encrypt writer: %w", err)
+				return
+			}
+			target = encWriter
+			closers = append(closers, encWriter)
+		}
+		compWriter, err := compress.NewWriter(opts.Compress, target)
+		if err != nil {
+			pw.CloseWithError(err)
+			dumpErrCh <- fmt.Errorf("backupjob: compress writer: %w", err)
+			return
+		}
+		closers = append([]io.Closer{compWriter}, closers...) // compress closes (flushes) first, then encrypt
+
 		_, dumpErr := backuper.Backup(ctx, driver.BackupOptions{Database: opts.Connection.Database, Output: compWriter})
 		var closeErr error
 		for _, c := range closers {
@@ -107,7 +105,7 @@ func Run(ctx context.Context, opts Options, logger *slog.Logger) (Result, error)
 				closeErr = err
 			}
 		}
-		err := dumpErr
+		err = dumpErr
 		if err == nil {
 			err = closeErr
 		}
