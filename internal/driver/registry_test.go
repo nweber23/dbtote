@@ -5,8 +5,8 @@ import "testing"
 func TestRegisterandGet(t *testing.T) {
 	called := false
 	Register("test-engine", func(cfg ConnectionConfig) (Connector, Backuper, Restorer) {
-			called = true
-			return nil, nil, nil
+		called = true
+		return nil, nil, nil
 	})
 	f, ok := Get("test-engine")
 	if !ok {

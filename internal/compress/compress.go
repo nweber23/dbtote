@@ -6,18 +6,18 @@ import (
 	"io"
 )
 
-type nopWriterCloser struct { io.Writer }
+type nopWriterCloser struct{ io.Writer }
 
 func (n nopWriterCloser) Close() error { return nil }
 
 func NewWriter(alg string, w io.Writer) (io.WriteCloser, error) {
 	switch alg {
-		case "", "none":
-			return nopWriterCloser{w}, nil
-		case "gzip":
-			return gzip.NewWriter(w), nil
-		default:
-			return nil, fmt.Errorf("compress: unsupported algorithm %q", alg)
+	case "", "none":
+		return nopWriterCloser{w}, nil
+	case "gzip":
+		return gzip.NewWriter(w), nil
+	default:
+		return nil, fmt.Errorf("compress: unsupported algorithm %q", alg)
 	}
 }
 

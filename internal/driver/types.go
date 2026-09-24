@@ -17,24 +17,24 @@ const (
 
 func (k IncrementalBasisKind) String() string {
 	switch k {
-		case BasisBinlog:
-			return "binlog"
-		case BasisWAL:
-			return "wal"
-		case BasisOplog:
-			return "oplog"
-		default:
-			return "none"
+	case BasisBinlog:
+		return "binlog"
+	case BasisWAL:
+		return "wal"
+	case BasisOplog:
+		return "oplog"
+	default:
+		return "none"
 	}
 }
 
 type ConnectionConfig struct {
-	Host		 string
-	Port		 int
-	User		 string
-	Password	 string
-	Database	 string
-	Extra		 map[string]string
+	Host     string
+	Port     int
+	User     string
+	Password string
+	Database string
+	Extra    map[string]string
 }
 
 type Connector interface {
@@ -45,7 +45,7 @@ type Connector interface {
 
 type BackupOptions struct {
 	Database string
-	Output  io.Writer
+	Output   io.Writer
 }
 
 type BackupResult struct {
