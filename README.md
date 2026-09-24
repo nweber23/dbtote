@@ -10,7 +10,7 @@ Phase 2: MySQL and PostgreSQL full backup/restore, local storage, gzip compressi
 
 ## Install
 
-No tagged releases yet — versioned binaries land in Phase 8 once `goreleaser` is wired up. Until then, build from source:
+No tagged releases yet — versioned binaries land in Phase 3 once `goreleaser` is wired up. Until then, build from source:
 
 ```bash
 git clone https://github.com/nweber23/dbtote.git

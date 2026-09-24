@@ -522,12 +522,12 @@ Semantic versioning, strictly tied to Conventional Commits: `fix:` → patch, `f
 - **Phase 0** — repo scaffold, cobra skeleton, `--help`/`version` work, CI pipeline running (even with nothing to test yet)
 - **Phase 1** — MySQL full backup+restore via shell-out, local storage, gzip, age encryption, structured logging, OS keyring for credentials — this is the first genuinely usable release (`v0.1.0`)
 - **Phase 2** — Postgres full backup+restore, config file support, `test-connection`, `config validate`
-- **Phase 3** — S3 storage backend (tested against MinIO), Slack notifications, retry/error handling hardening, retention policy enforcement
-- **Phase 4** — SQLite support, MongoDB full backup+restore
-- **Phase 5** — `dbtote schedule` (crontab/systemd unit generation) + `dbtote daemon` in-process scheduler
-- **Phase 6** — Incremental backups: MySQL binlog-based, Postgres WAL-based, MongoDB oplog-based; point-in-time restore
-- **Phase 7** — GCS + Azure Blob storage backends; selective (single table/collection) restore across all supported engines
-- **Phase 8** — Full CI/CD hardening: integration test matrix, coverage reporting, artifact signing, Homebrew tap, Docker image
+- **Phase 3** — Full CI/CD hardening: integration test matrix, coverage reporting, artifact signing, Homebrew tap, Docker image
+- **Phase 4** — S3 storage backend (tested against MinIO), Slack notifications, retry/error handling hardening, retention policy enforcement
+- **Phase 5** — SQLite support, MongoDB full backup+restore
+- **Phase 6** — `dbtote schedule` (crontab/systemd unit generation) + `dbtote daemon` in-process scheduler
+- **Phase 7** — Incremental backups: MySQL binlog-based, Postgres WAL-based, MongoDB oplog-based; point-in-time restore
+- **Phase 8** — GCS + Azure Blob storage backends; selective (single table/collection) restore across all supported engines
 - **Phase 9** — Pure-Go dump implementations for MySQL/Postgres (removing the `mysqldump`/`pg_dump` binary dependency)
 - **Phase 10** — Polish: docs site, man pages, shell completion, `dbtote config init` wizard, real-world load testing against large databases
 
