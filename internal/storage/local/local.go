@@ -32,7 +32,6 @@ func New(root string) *Backend {
 
 // Store writes r to / atomically: it writes to a same-directory
 // temp file first, then os.Rename()s into place, so nothing ever observes
-// a partially-written file at the final name (SPEC.md Section 10).
 func (b *Backend) Store(ctx context.Context, name string, r io.Reader) error {
 	if err := os.MkdirAll(b.root, 0o755); err != nil {
 		return fmt.Errorf("local: mkdir %q: %w", b.root, err)

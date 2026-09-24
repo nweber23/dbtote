@@ -8,7 +8,6 @@ import (
 )
 
 // BackupMeta describes one stored backup, reconstructed identically
-// whether the backend is local or cloud (SPEC.md Section 10).
 type BackupMeta struct {
 	Name      string
 	Target    string
@@ -17,8 +16,7 @@ type BackupMeta struct {
 	Timestamp time.Time
 }
 
-// Backend is where a backup stream ends up (SPEC.md Section 1's
-// StorageBackend).
+
 type Backend interface {
 	Store(ctx context.Context, name string, r io.Reader) error
 	Retrieve(ctx context.Context, name string) (io.ReadCloser, error)
