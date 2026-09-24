@@ -16,7 +16,6 @@ type BackupMeta struct {
 	Timestamp time.Time
 }
 
-
 type Backend interface {
 	Store(ctx context.Context, name string, r io.Reader) error
 	Retrieve(ctx context.Context, name string) (io.ReadCloser, error)
