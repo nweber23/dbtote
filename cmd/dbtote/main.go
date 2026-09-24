@@ -4,6 +4,9 @@ import (
 	"os"
 
 	"github.com/nweber23/dbtote/internal/cli"
+
+	_ "github.com/nweber23/dbtote/internal/db/mysql"
+	_ "github.com/nweber23/dbtote/internal/storage/local"
 )
 
 func main() {

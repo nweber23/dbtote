@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -42,6 +43,9 @@ func NewRootCommand() *cobra.Command {
 		return cmd.Help()
 	}
 	root.AddCommand(newVersionCommand())
+	root.AddCommand(newBackupCommand())
+	root.AddCommand(newRestoreCommand())
+	root.AddCommand(newSecretCommand())
 	return root
 }
 
@@ -50,6 +54,10 @@ func Execute() int {
 	cmd := NewRootCommand()
 	if err := cmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, "error:", err)
+		var ee exitError
+		if errors.As(err, &ee) {
+			return ee.code
+		}
 		return 1
 	}
 	return 0
