@@ -10,8 +10,12 @@ Phase 2: MySQL and PostgreSQL full backup/restore, local storage, gzip compressi
 
 ## Install
 
+No tagged releases yet — versioned binaries land in Phase 8 once `goreleaser` is wired up. Until then, build from source:
+
 ```bash
-go install github.com/nweber23/dbtote/cmd/dbtote@latest
+git clone https://github.com/nweber23/dbtote.git
+cd dbtote
+go build -o bin/dbtote ./cmd/dbtote
 ```
 
 Requires the `mysqldump`/`mysql` client binaries on `PATH` for MySQL targets, and `pg_dump`/`pg_restore` for PostgreSQL targets.
