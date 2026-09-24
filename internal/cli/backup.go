@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nweber23/dbtote/internal/backupjob"
-	"github.com/nweber23/dbtote/internal/driver"
 	"github.com/nweber23/dbtote/internal/logging"
 	"github.com/nweber23/dbtote/internal/secrets"
 	"github.com/nweber23/dbtote/internal/storage/local"
@@ -52,34 +51,39 @@ func newBackupCommand() *cobra.Command {
 			}
 			logger := logging.New(logFormat, level, cmd.OutOrStdout())
 
+			rt := resolveTarget(cmd, target, host, user, database, port, passwordEnv, output, recipient)
+			if rt.Connection.Host == "" || rt.Connection.User == "" || rt.Connection.Database == "" {
+				return exitError{code: 2, err: fmt.Errorf("cli: --host, --user, and --database are required unless --target resolves them from config")}
+			}
+
 			password, err := secrets.ResolvePassword(ctx, secrets.NewKeyringStore(), secrets.ResolveOptions{
-				EnvVarName: passwordEnv,
+				EnvVarName: rt.PasswordEnv,
 				KeyringKey: target,
 				Prompt:     promptForPassword,
 			})
 			if err != nil {
 				return exitError{code: 2, err: err}
 			}
+			rt.Connection.Password = password
 
-			var recipients []string
-			if recipient != "" {
-				recipients = []string{recipient}
+			if encrypt && len(rt.Recipients) == 0 {
+				return exitError{code: 2, err: fmt.Errorf("cli: --encrypt requires --recipient or encryption.recipients in config")}
 			}
-			if encrypt && len(recipients) == 0 {
-				return exitError{code: 2, err: fmt.Errorf("cli: --encrypt requires --recipient")}
+
+			dumpExt := "sql"
+			if rt.Engine == "postgres" {
+				dumpExt = "dump"
 			}
 
 			result, err := backupjob.Run(ctx, backupjob.Options{
-				TargetName: target,
-				Engine:     "mysql",
-				Connection: driver.ConnectionConfig{
-					Host: host, Port: port, User: user, Password: password, Database: database,
-				},
-				DumpFileExt: "sql",
+				TargetName:  target,
+				Engine:      rt.Engine,
+				Connection:  rt.Connection,
+				DumpFileExt: dumpExt,
 				Compress:    compressAlg,
 				Encrypt:     encrypt,
-				Recipients:  recipients,
-				Storage:     local.New(output),
+				Recipients:  rt.Recipients,
+				Storage:     local.New(rt.StoragePath),
 			}, logger)
 			if err != nil {
 				var be *backupjob.Error
@@ -105,9 +109,6 @@ func newBackupCommand() *cobra.Command {
 	cmd.Flags().StringVar(&recipient, "recipient", "", "age public key to encrypt to")
 	cmd.Flags().StringVar(&output, "output", ".", "Local directory to write the backup into")
 	mustMarkFlagRequired(cmd, "target")
-	mustMarkFlagRequired(cmd, "host")
-	mustMarkFlagRequired(cmd, "user")
-	mustMarkFlagRequired(cmd, "database")
 
 	return cmd
 }

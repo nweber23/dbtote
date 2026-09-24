@@ -75,14 +75,20 @@ func newRestoreCommand() *cobra.Command {
 				return exitError{code: 2, err: fmt.Errorf("cli: restore is destructive; re-run with --yes to proceed")}
 			}
 
+			rt := resolveTarget(cmd, target, host, user, database, port, passwordEnv, "", "")
+			if rt.Connection.Host == "" || rt.Connection.User == "" || rt.Connection.Database == "" {
+				return exitError{code: 2, err: fmt.Errorf("cli: --host, --user, and --database are required unless --target resolves them from config")}
+			}
+
 			password, err := secrets.ResolvePassword(ctx, secrets.NewKeyringStore(), secrets.ResolveOptions{
-				EnvVarName: passwordEnv,
+				EnvVarName: rt.PasswordEnv,
 				KeyringKey: target,
 				Prompt:     promptForPassword,
 			})
 			if err != nil {
 				return exitError{code: 2, err: err}
 			}
+			rt.Connection.Password = password
 
 			f, err := os.Open(from)
 			if err != nil {
@@ -95,14 +101,13 @@ func newRestoreCommand() *cobra.Command {
 				return exitError{code: 1, err: err}
 			}
 
-			factory, ok := driver.Get("mysql")
+			factory, ok := driver.Get(rt.Engine)
 			if !ok {
-				return exitError{code: 2, err: fmt.Errorf("cli: unknown engine %q", "mysql")}
+				return exitError{code: 2, err: fmt.Errorf("cli: unknown engine %q", rt.Engine)}
 			}
-			cfg := driver.ConnectionConfig{Host: host, Port: port, User: user, Password: password, Database: database}
-			conn, _, restorer := factory(cfg)
+			conn, _, restorer := factory(rt.Connection)
 
-			if err := conn.Connect(ctx, cfg); err != nil {
+			if err := conn.Connect(ctx, rt.Connection); err != nil {
 				return exitError{code: 3, err: err}
 			}
 			defer conn.Close()
@@ -110,7 +115,7 @@ func newRestoreCommand() *cobra.Command {
 				return exitError{code: 3, err: err}
 			}
 
-			if err := restorer.Restore(ctx, driver.RestoreOptions{Database: database, Input: reader}); err != nil {
+			if err := restorer.Restore(ctx, driver.RestoreOptions{Database: rt.Connection.Database, Input: reader}); err != nil {
 				return exitError{code: 1, err: err}
 			}
 
@@ -130,9 +135,6 @@ func newRestoreCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&yes, "yes", false, "Skip the destructive-restore confirmation")
 	mustMarkFlagRequired(cmd, "target")
 	mustMarkFlagRequired(cmd, "from")
-	mustMarkFlagRequired(cmd, "host")
-	mustMarkFlagRequired(cmd, "user")
-	mustMarkFlagRequired(cmd, "database")
 
 	return cmd
 }
