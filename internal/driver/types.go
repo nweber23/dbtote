@@ -55,7 +55,7 @@ type BackupResult struct {
 type Backuper interface {
 	Backup(ctx context.Context, opts BackupOptions) (BackupResult, error)
 	SupportsIncremental() bool
-	SupportsDiffrential() bool
+	SupportsDifferential() bool
 	IncrementalBasis() IncrementalBasisKind
 }
 
