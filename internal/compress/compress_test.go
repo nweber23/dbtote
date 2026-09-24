@@ -40,8 +40,12 @@ func TestNoneRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewWriter: %v", err)
 	}
-	w.Write([]byte("raw"))
-	w.Close()
+	if _, err := w.Write([]byte("raw")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 	if buf.String() != "raw" {
 		t.Errorf("got %q, want %q", buf.String(), "raw")
 	}
