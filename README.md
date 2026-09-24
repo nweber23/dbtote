@@ -6,7 +6,7 @@ Full design: [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-Phase 1: MySQL full backup/restore, local storage, gzip compression, age encryption, OS-keyring credentials.
+Phase 2: MySQL and PostgreSQL full backup/restore, local storage, gzip compression, age encryption, OS-keyring credentials, YAML config file with targets, `test-connection`, and `list`.
 
 ## Install
 
@@ -14,7 +14,7 @@ Phase 1: MySQL full backup/restore, local storage, gzip compression, age encrypt
 go install github.com/nweber23/dbtote/cmd/dbtote@latest
 ```
 
-Requires the `mysqldump` and `mysql` client binaries on `PATH`.
+Requires the `mysqldump`/`mysql` client binaries on `PATH` for MySQL targets, and `pg_dump`/`pg_restore` for PostgreSQL targets.
 
 ## Quick start
 
