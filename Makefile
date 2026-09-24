@@ -1,4 +1,6 @@
-.PHONY: build test test-integration vet lint fmt
+.PHONY: all build test test-integration vet lint fmt
+
+all: fmt vet lint test build
 
 build:
 	go build -o bin/dbtote ./cmd/dbtote
