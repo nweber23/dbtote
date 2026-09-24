@@ -1,0 +1,48 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  ci-gate:
+    uses: ./.github/workflows/ci.yml
+
+  release:
+    needs: ci-gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write # needed for cosign's keyless signing
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # goreleaser's changelog needs full history, not a shallow clone
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.25.x
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          HOMEBREW_TAP_GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_GITHUB_TOKEN }}
+      - uses: sigstore/cosign-installer@v3
+      - name: Sign release artifacts (keyless)
+        run: |
+          for f in dist/*.tar.gz dist/*.zip dist/checksums.txt; do
+            [ -e "$f" ] || continue
+            cosign sign-blob --yes "$f" --output-signature "$f.sig" --output-certificate "$f.pem"
+          done
+      - name: Upload signatures to the release
+        run: gh release upload "${GITHUB_REF_NAME}" dist/*.sig dist/*.pem --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
