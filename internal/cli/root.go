@@ -47,6 +47,8 @@ func NewRootCommand() *cobra.Command {
 	root.AddCommand(newRestoreCommand())
 	root.AddCommand(newSecretCommand())
 	root.AddCommand(newConfigCommand())
+	root.AddCommand(newTestConnectionCommand())
+	root.AddCommand(newListCommand())
 	return root
 }
 
