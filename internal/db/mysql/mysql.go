@@ -66,6 +66,7 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 
 func (e *Engine) Backup(ctx context.Context, opts driver.BackupOptions) (driver.BackupResult, error) {
 	cmd := exec.CommandContext(ctx, "mysqldump",
+		"--protocol=TCP",
 		"--host="+e.cfg.Host,
 		fmt.Sprintf("--port=%d", e.cfg.Port),
 		"--user="+e.cfg.User,
@@ -92,6 +93,7 @@ func (e *Engine) IncrementalBasis() driver.IncrementalBasisKind {
 
 func (e *Engine) Restore(ctx context.Context, opts driver.RestoreOptions) error {
 	cmd := exec.CommandContext(ctx, "mysql",
+		"--protocol=TCP",
 		"--host="+e.cfg.Host,
 		fmt.Sprintf("--port=%d", e.cfg.Port),
 		"--user="+e.cfg.User,
