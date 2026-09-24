@@ -6,7 +6,7 @@ Full design: [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-Phase 2: MySQL and PostgreSQL full backup/restore, local storage, gzip compression, age encryption, OS-keyring credentials, YAML config file with targets, `test-connection`, and `list`.
+Phase 3: MySQL and PostgreSQL full backup/restore, local storage, gzip compression, age encryption, OS-keyring credentials, YAML config file with targets, `test-connection`, `list`, and CI/CD (gated releases, Docker image, keyless artifact signing, PR coverage comments).
 
 ## Install
 
@@ -99,6 +99,16 @@ With a config file in place, `dbtote backup --target prod-mysql` and `dbtote res
 ### PostgreSQL
 
 Postgres is supported the same way MySQL is — set `engine: postgres` on a target. Requires the `pg_dump` and `pg_restore` client binaries on `PATH`.
+
+## Releasing
+
+Pushing a `v*` tag triggers `.github/workflows/release.yml`: it gates on the full CI suite, then runs `goreleaser` to cross-compile binaries for linux/darwin/windows (amd64 + arm64, minus windows/arm64), checksum them, and publish a GitHub Release with an auto-generated changelog. Every release artifact is signed keylessly with [`cosign`](https://github.com/sigstore/cosign) (Sigstore's OIDC-based flow — no signing key to manage), and a multi-arch Docker image is published to `ghcr.io/nweber23/dbtote`:
+
+```bash
+docker run --rm ghcr.io/nweber23/dbtote:latest backup --target prod-mysql --host db.internal --user backup_svc --database app_production --output /backups
+```
+
+Homebrew isn't set up yet — it needs a separate `nweber23/homebrew-dbtote` tap repository and a `HOMEBREW_TAP_GITHUB_TOKEN` secret, neither of which exist yet (link here once they do).
 
 ## Development
 
