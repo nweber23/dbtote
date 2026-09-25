@@ -40,6 +40,16 @@ func DefaultPath() (string, error) {
 	return filepath.Join(dir, "dbtote", "config.yaml"), nil
 }
 
+// DefaultStateDBPath returns the default location of dbtote's local
+// backup-metadata SQLite index, alongside the default config file.
+func DefaultStateDBPath() (string, error) {
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("config: resolve user config dir: %w", err)
+	}
+	return filepath.Join(dir, "dbtote", "state.db"), nil
+}
+
 func (c *Config) Validate() error {
 	var errs []string
 
