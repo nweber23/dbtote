@@ -461,7 +461,7 @@ Beyond the basic interface (`Store`/`Retrieve`/`List`/`Delete`):
 - **S3 / GCS / Azure**: all three wrap their SDK's streaming upload APIs so `Store` accepts an `io.Reader` and never requires knowing the total size up front (important since compressed+encrypted output size isn't known until the stream ends). Credentials resolved via each SDK's standard credential chain (env vars, shared config files, instance/workload identity) — dbtote does not reinvent cloud credential storage.
 - **List** returns `BackupMeta` (name, size, timestamp, target, type) reconstructed either from object metadata/tags (cloud) or from the local state index (local), kept consistent so `dbtote list` output looks identical regardless of backend.
 
-For local dev/testing (per your input), cloud backends are tested against **local substitutes**: MinIO (S3-compatible) via Docker Compose for the S3 backend, and the official GCS/Azure emulators (`fake-gcs-server`, Azurite) similarly — this gives real integration coverage without needing live cloud credentials or cost.
+For local dev/testing (per your input), cloud backends are tested against **local substitutes**: Adobe S3Mock (S3-compatible) for the S3 backend — MinIO's community images were pulled from Docker Hub and Quay.io in September 2026, and LocalStack dropped its free tier in March 2026, so S3Mock is the zero-auth alternative — and the official GCS/Azure emulators (`fake-gcs-server`, Azurite) similarly, this gives real integration coverage without needing live cloud credentials or cost.
 
 ---
 
@@ -492,7 +492,7 @@ On failure, `status: "failure"`, plus `error` (message, redacted) and `stage` (w
 
 - **Unit tests**: pure logic — config parsing/validation, retention policy calculation, backup filename generation, incremental-basis state tracking, redaction logic. No real DB or network needed; run on every `go test ./...`.
 - **Integration tests** (build-tagged `//go:build integration`, run separately in CI): spin up real MySQL/Postgres/MongoDB via `testcontainers-go`, exercise full backup → restore round-trips, verify data integrity after restore (row counts / checksums match), exercise incremental chains against real binlog/WAL/oplog.
-- **Storage backend tests**: against MinIO/Azurite/fake-gcs-server containers, same pattern.
+- **Storage backend tests**: against S3Mock/Azurite/fake-gcs-server containers, same pattern.
 - **End-to-end smoke test**: one test that runs the actual compiled binary against a full pipeline (real DB container → backup → encrypt → store locally → restore → verify), used as a release gate.
 - Target **>75% coverage** on `internal/` excluding thin CLI wiring, enforced via `go test -race -cover` in CI (not a hard gate that blocks merges initially, but tracked and shown on PRs via a coverage comment).
 
@@ -505,7 +505,7 @@ On failure, `status: "failure"`, plus `error` (message, redacted) and `stage` (w
 2. `golangci-lint run`
 3. `go test ./... -race -cover` (unit tests)
 4. Build matrix: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64` — compile-only check, catches platform-specific breakage early
-5. `go test -tags=integration ./...` against `testcontainers-go`-managed MySQL/Postgres/Mongo/MinIO/Azurite containers (this job can be slower/separate from the fast unit-test job)
+5. `go test -tags=integration ./...` against `testcontainers-go`-managed MySQL/Postgres/Mongo containers and Adobe S3Mock/Azurite containers (this job can be slower/separate from the fast unit-test job)
 
 ### `release.yml` (on `v*` tag push)
 1. Run full CI suite as a gate
@@ -523,7 +523,7 @@ Semantic versioning, strictly tied to Conventional Commits: `fix:` → patch, `f
 - **Phase 1** — MySQL full backup+restore via shell-out, local storage, gzip, age encryption, structured logging, OS keyring for credentials — this is the first genuinely usable release (`v0.1.0`)
 - **Phase 2** — Postgres full backup+restore, config file support, `test-connection`, `config validate`
 - **Phase 3** — Full CI/CD hardening: integration test matrix, coverage reporting, artifact signing, Homebrew tap, Docker image
-- **Phase 4** — S3 storage backend (tested against MinIO), Slack notifications, retry/error handling hardening, retention policy enforcement
+- **Phase 4** — S3 storage backend (tested against Adobe S3Mock), Slack notifications, retry/error handling hardening, retention policy enforcement
 - **Phase 5** — SQLite support, MongoDB full backup+restore
 - **Phase 6** — `dbtote schedule` (crontab/systemd unit generation) + `dbtote daemon` in-process scheduler
 - **Phase 7** — Incremental backups: MySQL binlog-based, Postgres WAL-based, MongoDB oplog-based; point-in-time restore
