@@ -6,12 +6,14 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"filippo.io/age"
 
 	"github.com/nweber23/dbtote/internal/driver"
+	"github.com/nweber23/dbtote/internal/retention"
 	"github.com/nweber23/dbtote/internal/storage"
 )
 
@@ -58,7 +60,10 @@ func (s *stubStorage) Retrieve(ctx context.Context, name string) (io.ReadCloser,
 func (s *stubStorage) List(ctx context.Context, prefix string) ([]storage.BackupMeta, error) {
 	return nil, nil
 }
-func (s *stubStorage) Delete(ctx context.Context, name string) error { return nil }
+func (s *stubStorage) Delete(ctx context.Context, name string) error {
+	delete(s.stored, name)
+	return nil
+}
 
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
@@ -155,4 +160,138 @@ func keysOf(m map[string][]byte) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+type recordingNotifier struct {
+	messages []string
+}
+
+func (n *recordingNotifier) Notify(ctx context.Context, message string) error {
+	n.messages = append(n.messages, message)
+	return nil
+}
+
+func TestRun_RecordsMetadataInStateDB(t *testing.T) {
+	driver.Register("stub-run-4", func(cfg driver.ConnectionConfig) (driver.Connector, driver.Backuper, driver.Restorer) {
+		return &stubConnector{}, &stubBackuper{payload: []byte("dump")}, nil
+	})
+
+	stateDB, err := OpenStateDB(filepath.Join(t.TempDir(), "state.db"))
+	if err != nil {
+		t.Fatalf("OpenStateDB: %v", err)
+	}
+	defer stateDB.Close()
+
+	result, err := Run(context.Background(), Options{
+		TargetName:  "state-target",
+		Engine:      "stub-run-4",
+		DumpFileExt: "sql",
+		Compress:    "none",
+		Storage:     &stubStorage{},
+		StorageName: "local-main",
+		State:       stateDB,
+		Now:         time.Now,
+	}, discardLogger())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	records, err := stateDB.ListBackups(context.Background(), ListFilter{Target: "state-target"})
+	if err != nil {
+		t.Fatalf("ListBackups: %v", err)
+	}
+	if len(records) != 1 || records[0].Filename != result.Filename {
+		t.Errorf("expected one recorded backup matching %q, got %+v", result.Filename, records)
+	}
+}
+
+func TestRun_AppliesRetentionAfterRecording(t *testing.T) {
+	driver.Register("stub-run-5", func(cfg driver.ConnectionConfig) (driver.Connector, driver.Backuper, driver.Restorer) {
+		return &stubConnector{}, &stubBackuper{payload: []byte("dump")}, nil
+	})
+
+	stateDB, _ := OpenStateDB(filepath.Join(t.TempDir(), "state.db"))
+	defer stateDB.Close()
+	ctx := context.Background()
+
+	// Seed three pre-existing old backups for this target so retention has something to prune.
+	old := time.Now().Add(-100 * 24 * time.Hour)
+	for _, name := range []string{"old1", "old2", "old3"} {
+		if err := stateDB.RecordBackup(ctx, BackupRecord{Filename: name, Target: "retain-target", Timestamp: old}); err != nil {
+			t.Fatalf("RecordBackup %s: %v", name, err)
+		}
+	}
+
+	st := &stubStorage{stored: map[string][]byte{"old1": {}, "old2": {}, "old3": {}}}
+	policy := &retention.Policy{KeepLast: 1}
+
+	_, err := Run(ctx, Options{
+		TargetName:      "retain-target",
+		Engine:          "stub-run-5",
+		DumpFileExt:     "sql",
+		Compress:        "none",
+		Storage:         st,
+		StorageName:     "local-main",
+		State:           stateDB,
+		RetentionPolicy: policy,
+		Now:             time.Now,
+	}, discardLogger())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	records, _ := stateDB.ListBackups(ctx, ListFilter{Target: "retain-target"})
+	if len(records) != 1 {
+		t.Errorf("expected keep_last=1 to leave exactly 1 record, got %d: %+v", len(records), records)
+	}
+	for _, name := range []string{"old1", "old2", "old3"} {
+		if _, exists := st.stored[name]; exists {
+			t.Errorf("expected %q to be deleted from storage by retention", name)
+		}
+	}
+}
+
+func TestRun_NotifiesOnSuccess(t *testing.T) {
+	driver.Register("stub-run-6", func(cfg driver.ConnectionConfig) (driver.Connector, driver.Backuper, driver.Restorer) {
+		return &stubConnector{}, &stubBackuper{payload: []byte("dump")}, nil
+	})
+
+	n := &recordingNotifier{}
+	_, err := Run(context.Background(), Options{
+		TargetName: "notify-target",
+		Engine:     "stub-run-6",
+		Compress:   "none",
+		Storage:    &stubStorage{},
+		Notifier:   n,
+		NotifyOn:   []string{"success"},
+		Now:        time.Now,
+	}, discardLogger())
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(n.messages) != 1 {
+		t.Fatalf("expected exactly one notification, got %d", len(n.messages))
+	}
+}
+
+func TestRun_NotifiesOnFailure(t *testing.T) {
+	driver.Register("stub-run-7", func(cfg driver.ConnectionConfig) (driver.Connector, driver.Backuper, driver.Restorer) {
+		return &stubConnector{pingErr: errors.New("down")}, &stubBackuper{}, nil
+	})
+
+	n := &recordingNotifier{}
+	_, err := Run(context.Background(), Options{
+		TargetName: "notify-fail-target",
+		Engine:     "stub-run-7",
+		Storage:    &stubStorage{},
+		Notifier:   n,
+		NotifyOn:   []string{"failure"},
+		Now:        time.Now,
+	}, discardLogger())
+	if err == nil {
+		t.Fatal("expected an error")
+	}
+	if len(n.messages) != 1 {
+		t.Fatalf("expected exactly one failure notification, got %d", len(n.messages))
+	}
 }
