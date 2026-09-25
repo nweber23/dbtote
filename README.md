@@ -16,7 +16,13 @@ Download a prebuilt binary from the [latest release](https://github.com/nweber23
 docker pull ghcr.io/nweber23/dbtote:latest
 ```
 
-Or build from source:
+Or install with Go (builds from source, so `dbtote --version` won't show a real version — use a prebuilt binary or the Docker image above if you need that):
+
+```bash
+go install github.com/nweber23/dbtote/cmd/dbtote@latest
+```
+
+Or build from a local clone:
 
 ```bash
 git clone https://github.com/nweber23/dbtote.git
