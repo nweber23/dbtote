@@ -6,11 +6,17 @@ Full design: [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-Phase 3: MySQL and PostgreSQL full backup/restore, local storage, gzip compression, age encryption, OS-keyring credentials, YAML config file with targets, `test-connection`, `list`, and CI/CD (gated releases, Docker image, keyless artifact signing, PR coverage comments).
+Phase 4: MySQL and PostgreSQL full backup/restore, local and S3 storage, gzip compression, age encryption, OS-keyring credentials, YAML config file with targets, `test-connection`, `list` (backed by a local SQLite metadata index), retention policy enforcement, Slack success/failure notifications, and CI/CD (gated releases, Docker image, keyless artifact signing, PR coverage comments).
 
 ## Install
 
-No tagged releases yet — versioned binaries land in Phase 3 once `goreleaser` is wired up. Until then, build from source:
+Download a prebuilt binary from the [latest release](https://github.com/nweber23/dbtote/releases/latest), or pull the Docker image:
+
+```bash
+docker pull ghcr.io/nweber23/dbtote:latest
+```
+
+Or build from source:
 
 ```bash
 git clone https://github.com/nweber23/dbtote.git
@@ -99,6 +105,46 @@ With a config file in place, `dbtote backup --target prod-mysql` and `dbtote res
 ### PostgreSQL
 
 Postgres is supported the same way MySQL is — set `engine: postgres` on a target. Requires the `pg_dump` and `pg_restore` client binaries on `PATH`.
+
+## S3 storage, retention, and notifications
+
+Add an S3 (or S3-compatible) backend under `storage:` — credentials resolve via the standard AWS chain (env vars, shared config, instance/workload identity), never a dbtote-specific setting:
+
+```yaml
+storage:
+  s3-main:
+    type: s3
+    bucket: prod-dbtote-backups
+    region: us-east-1
+    prefix: dbtote/
+```
+
+Set a retention policy under `defaults:` (applies to every target) and/or per-target — `keep_last` and `keep_days` are a union, a backup survives if it satisfies either:
+
+```yaml
+defaults:
+  retention:
+    keep_last: 7
+    keep_days: 30
+```
+
+See what a policy would delete without deleting anything, then enforce it:
+
+```bash
+dbtote retention preview --target prod-mysql
+dbtote retention apply --target prod-mysql
+```
+
+Get a Slack message on backup success and/or failure — `webhook_url_env` names an env var holding the webhook URL, never the URL itself in the config file:
+
+```yaml
+notify:
+  slack:
+    webhook_url_env: SLACK_WEBHOOK_URL
+    on: [success, failure]
+```
+
+`dbtote backup` sends notifications by default when `notify.slack` is configured; pass `--notify=false` to skip one run without touching the config.
 
 ## Releasing
 
