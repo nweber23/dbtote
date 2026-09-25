@@ -55,8 +55,12 @@ func TestStateDB_ListSinceFilter(t *testing.T) {
 	defer db.Close()
 	ctx := context.Background()
 
-	db.RecordBackup(ctx, BackupRecord{Filename: "old", Target: "t", Timestamp: time.Now().Add(-72 * time.Hour)})
-	db.RecordBackup(ctx, BackupRecord{Filename: "recent", Target: "t", Timestamp: time.Now().Add(-1 * time.Hour)})
+	if err := db.RecordBackup(ctx, BackupRecord{Filename: "old", Target: "t", Timestamp: time.Now().Add(-72 * time.Hour)}); err != nil {
+		t.Fatalf("RecordBackup old: %v", err)
+	}
+	if err := db.RecordBackup(ctx, BackupRecord{Filename: "recent", Target: "t", Timestamp: time.Now().Add(-1 * time.Hour)}); err != nil {
+		t.Fatalf("RecordBackup recent: %v", err)
+	}
 
 	records, err := db.ListBackups(ctx, ListFilter{Target: "t", Since: time.Now().Add(-24 * time.Hour)})
 	if err != nil {
