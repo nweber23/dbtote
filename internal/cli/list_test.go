@@ -29,7 +29,7 @@ storage:
 	root := NewRootCommand()
 	buf := &bytes.Buffer{}
 	root.SetOut(buf)
-	root.SetArgs([]string{"list", "--config", cfgPath})
+	root.SetArgs([]string{"list", "--config", cfgPath, "--state-db", filepath.Join(dir, "state.db")})
 
 	if err := root.Execute(); err != nil {
 		t.Fatalf("unexpected error: %v", err)

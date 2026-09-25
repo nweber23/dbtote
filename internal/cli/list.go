@@ -26,6 +26,7 @@ func newListCommand() *cobra.Command {
 		storageFilter string
 		since         time.Duration
 		asJSON        bool
+		stateDBPath   string
 	)
 
 	cmd := &cobra.Command{
@@ -62,26 +63,45 @@ func newListCommand() *cobra.Command {
 			if targetFilter != "" {
 				prefix = targetFilter + "_"
 			}
-			metas, err := backend.List(cmd.Context(), prefix)
-			if err != nil {
-				return exitError{code: 1, err: err}
+			statePath := stateDBPath
+			if statePath == "" {
+				var spErr error
+				statePath, spErr = config.DefaultStateDBPath()
+				if spErr != nil {
+					statePath = ""
+				}
 			}
-
-			cutoff := time.Time{}
-			if since > 0 {
-				cutoff = time.Now().Add(-since)
-			}
-
 			var entries []listEntry
-			for _, m := range metas {
-				target, backupType, ts, ok := backupjob.ParseFilename(m.Name)
-				if !ok {
-					continue
+			if statePath != "" {
+				if db, openErr := backupjob.OpenStateDB(statePath); openErr == nil {
+					defer db.Close()
+					records, listErr := db.ListBackups(cmd.Context(), backupjob.ListFilter{Target: targetFilter, Storage: storageName, Since: cutoffOrZero(since)})
+					if listErr == nil && len(records) > 0 {
+						for _, r := range records {
+							entries = append(entries, listEntry{Name: r.Filename, Target: r.Target, Type: r.Type, Size: r.Size, Timestamp: r.Timestamp})
+						}
+					}
 				}
-				if !cutoff.IsZero() && ts.Before(cutoff) {
-					continue
+			}
+			if entries == nil {
+				// Fall back to a direct backend listing (Phase 2 behavior) —
+				// covers a state DB that's empty, missing, or predates this
+				// backup (e.g. right after an upgrade from Phase 2).
+				cutoff := cutoffOrZero(since)
+				metas, err := backend.List(cmd.Context(), prefix)
+				if err != nil {
+					return exitError{code: 1, err: err}
 				}
-				entries = append(entries, listEntry{Name: m.Name, Target: target, Type: backupType, Size: m.Size, Timestamp: ts})
+				for _, m := range metas {
+					target, backupType, ts, ok := backupjob.ParseFilename(m.Name)
+					if !ok {
+						continue
+					}
+					if !cutoff.IsZero() && ts.Before(cutoff) {
+						continue
+					}
+					entries = append(entries, listEntry{Name: m.Name, Target: target, Type: backupType, Size: m.Size, Timestamp: ts})
+				}
 			}
 
 			if asJSON {
@@ -100,5 +120,13 @@ func newListCommand() *cobra.Command {
 	cmd.Flags().StringVar(&storageFilter, "storage", "", "Storage backend name (default: config default)")
 	cmd.Flags().DurationVar(&since, "since", 0, "Only show backups newer than this duration ago")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Output as JSON")
+	cmd.Flags().StringVar(&stateDBPath, "state-db", "", "Override the state DB path (default: config.DefaultStateDBPath)")
 	return cmd
+}
+
+func cutoffOrZero(since time.Duration) time.Time {
+	if since <= 0 {
+		return time.Time{}
+	}
+	return time.Now().Add(-since)
 }

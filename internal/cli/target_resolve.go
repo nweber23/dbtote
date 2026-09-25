@@ -14,6 +14,7 @@ type resolvedTarget struct {
 	Connection  driver.ConnectionConfig
 	PasswordEnv string
 	StoragePath string
+	StorageName string
 	Recipients  []string
 }
 
@@ -60,6 +61,7 @@ func resolveTarget(cmd *cobra.Command, target, host, user, database string, port
 	if !cmd.Flags().Changed("output") && t.Storage != "" {
 		if spec, ok := cfg.Storage[t.Storage]; ok {
 			rt.StoragePath = spec.Path
+			rt.StorageName = t.Storage
 		}
 	}
 	if !cmd.Flags().Changed("recipient") {

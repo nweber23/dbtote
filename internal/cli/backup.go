@@ -11,7 +11,10 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/nweber23/dbtote/internal/backupjob"
+	"github.com/nweber23/dbtote/internal/config"
 	"github.com/nweber23/dbtote/internal/logging"
+	"github.com/nweber23/dbtote/internal/notify/slack"
+	"github.com/nweber23/dbtote/internal/retention"
 	"github.com/nweber23/dbtote/internal/secrets"
 	"github.com/nweber23/dbtote/internal/storage/local"
 )
@@ -37,6 +40,7 @@ func newBackupCommand() *cobra.Command {
 		encrypt     bool
 		recipient   string
 		output      string
+		notifyFlag  bool
 	)
 
 	cmd := &cobra.Command{
@@ -75,15 +79,52 @@ func newBackupCommand() *cobra.Command {
 				dumpExt = "dump"
 			}
 
+			var stateDB *backupjob.StateDB
+			var retentionPolicy *retention.Policy
+			var notifier backupjob.Notifier
+			var notifyOn []string
+
+			if path, pathErr := resolveConfigPath(); pathErr == nil {
+				if cfg, loadErr := config.Load(path); loadErr == nil {
+					statePath, spErr := config.DefaultStateDBPath()
+					if spErr == nil {
+						if db, openErr := backupjob.OpenStateDB(statePath); openErr == nil {
+							stateDB = db
+							defer db.Close()
+						}
+					}
+					policy := resolveRetentionPolicy(cfg, target)
+					if policy.KeepLast != 0 || policy.KeepDays != 0 {
+						retentionPolicy = &policy
+					}
+					if cfg.Notify.Slack.WebhookURLEnv != "" {
+						if url := os.Getenv(cfg.Notify.Slack.WebhookURLEnv); url != "" {
+							notifier = slack.New(url)
+							notifyOn = cfg.Notify.Slack.On
+						}
+					}
+				}
+			}
+
+			notifyExplicitlySet := cmd.Flags().Changed("notify") || cmd.Flags().Changed("no-notify")
+			if notifyExplicitlySet && !notifyFlag {
+				notifier = nil
+			}
+
 			result, err := backupjob.Run(ctx, backupjob.Options{
-				TargetName:  target,
-				Engine:      rt.Engine,
-				Connection:  rt.Connection,
-				DumpFileExt: dumpExt,
-				Compress:    compressAlg,
-				Encrypt:     encrypt,
-				Recipients:  rt.Recipients,
-				Storage:     local.New(rt.StoragePath),
+				TargetName:      target,
+				Engine:          rt.Engine,
+				Connection:      rt.Connection,
+				DumpFileExt:     dumpExt,
+				Compress:        compressAlg,
+				Encrypt:         encrypt,
+				Recipients:      rt.Recipients,
+				Storage:         local.New(rt.StoragePath),
+				StorageName:     rt.StorageName,
+				State:           stateDB,
+				RetentionPolicy: retentionPolicy,
+				Notifier:        notifier,
+				NotifyOn:        notifyOn,
 			}, logger)
 			if err != nil {
 				var be *backupjob.Error
@@ -108,6 +149,8 @@ func newBackupCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&encrypt, "encrypt", false, "Encrypt output with age")
 	cmd.Flags().StringVar(&recipient, "recipient", "", "age public key to encrypt to")
 	cmd.Flags().StringVar(&output, "output", ".", "Local directory to write the backup into")
+	cmd.Flags().BoolVar(&notifyFlag, "notify", true, "Send a notification for this run (overrides config); pass --notify=false as the --no-notify equivalent")
+	cmd.Flags().Lookup("notify").NoOptDefVal = "true"
 	mustMarkFlagRequired(cmd, "target")
 
 	return cmd
