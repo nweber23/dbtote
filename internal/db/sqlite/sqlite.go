@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	_ "modernc.org/sqlite"
 
@@ -73,14 +74,18 @@ func (e *Engine) Backup(ctx context.Context, opts driver.BackupOptions) (driver.
 		return driver.BackupResult{}, fmt.Errorf("sqlite: set busy_timeout: %w", err)
 	}
 
-	tmp, err := os.CreateTemp("", "dbtote-sqlite-backup-*.db")
+	// VACUUM INTO refuses to write to a path that already exists, so the
+	// destination can't be created up front the way os.CreateTemp normally
+	// would be used — it has to not exist right before SQLite creates it.
+	// A private 0700 directory closes that window: even though the file
+	// itself briefly doesn't exist, nothing else on the machine can reach
+	// this directory to race the creation or read the backup afterward.
+	tmpDir, err := os.MkdirTemp("", "dbtote-sqlite-backup-*")
 	if err != nil {
-		return driver.BackupResult{}, fmt.Errorf("sqlite: create temp file: %w", err)
+		return driver.BackupResult{}, fmt.Errorf("sqlite: create temp dir: %w", err)
 	}
-	tmpPath := tmp.Name()
-	tmp.Close()
-	os.Remove(tmpPath) // VACUUM INTO requires the destination not to exist yet
-	defer os.Remove(tmpPath)
+	defer os.RemoveAll(tmpDir)
+	tmpPath := filepath.Join(tmpDir, "backup.db")
 
 	if _, err := db.ExecContext(ctx, "VACUUM INTO ?", tmpPath); err != nil {
 		return driver.BackupResult{}, fmt.Errorf("sqlite: VACUUM INTO: %w", err)

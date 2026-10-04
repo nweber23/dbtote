@@ -72,5 +72,13 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: 1.25.x
+      - name: Install MongoDB Database Tools
+        # mysql-client/postgresql-client already ship on ubuntu-latest;
+        # mongodump/mongorestore don't, and the MongoDB engine's
+        # integration test shells out to them directly.
+        run: |
+          curl -fsSL -o /tmp/mongodb-database-tools.deb \
+            https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2404-x86_64-100.14.0.deb
+          sudo apt-get install -y /tmp/mongodb-database-tools.deb
       - name: go test -tags=integration
         run: go test -tags=integration ./... -v

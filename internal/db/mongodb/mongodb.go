@@ -5,13 +5,50 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"regexp"
+	"strconv"
 
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 
 	"github.com/nweber23/dbtote/internal/driver"
 )
+
+// credentialPattern matches the userinfo portion of a MongoDB connection
+// string (scheme://user:pass@) so it can be scrubbed from mongodump/
+// mongorestore output before it's wrapped into an error — both tools echo
+// the full URI, including the password, back into their own stderr on a
+// connection failure.
+var credentialPattern = regexp.MustCompile(`://[^@/\s]*@`)
+
+func redactURI(s string) string {
+	return credentialPattern.ReplaceAllString(s, "://***@")
+}
+
+// writeURIConfig writes the connection URI to a config file instead of
+// passing --uri on the command line: argv is world-readable on Linux via
+// /proc/<pid>/cmdline (and via `ps`), which would otherwise expose the
+// embedded credentials to any other local user for as long as the process
+// runs. The directory is created 0700 so nothing but this process can read
+// the file in between.
+func writeURIConfig(uri string) (path string, cleanup func(), err error) {
+	dir, err := os.MkdirTemp("", "dbtote-mongo-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("mongodb: create config dir: %w", err)
+	}
+	cleanup = func() { os.RemoveAll(dir) }
+
+	path = filepath.Join(dir, "config.yaml")
+	contents := "uri: " + strconv.Quote(uri) + "\n"
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("mongodb: write config file: %w", err)
+	}
+	return path, cleanup, nil
+}
 
 func init() {
 	driver.Register("mongodb", New)
@@ -69,8 +106,14 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 // single streamable file (unlike mongodump's default directory-of-BSON
 // output) — exactly what the dump->compress->encrypt->store pipeline needs.
 func (e *Engine) Backup(ctx context.Context, opts driver.BackupOptions) (driver.BackupResult, error) {
+	configPath, cleanup, err := writeURIConfig(e.cfg.Extra["uri"])
+	if err != nil {
+		return driver.BackupResult{}, err
+	}
+	defer cleanup()
+
 	cmd := exec.CommandContext(ctx, "mongodump",
-		"--uri="+e.cfg.Extra["uri"],
+		"--config="+configPath,
 		"--db="+opts.Database,
 		"--archive",
 	)
@@ -80,7 +123,7 @@ func (e *Engine) Backup(ctx context.Context, opts driver.BackupOptions) (driver.
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return driver.BackupResult{}, fmt.Errorf("mongodump: %w: %s", err, stderr.String())
+		return driver.BackupResult{}, fmt.Errorf("mongodump: %w: %s", err, redactURI(stderr.String()))
 	}
 	return driver.BackupResult{BytesWritten: counting.n}, nil
 }
@@ -92,8 +135,14 @@ func (e *Engine) IncrementalBasis() driver.IncrementalBasisKind {
 }
 
 func (e *Engine) Restore(ctx context.Context, opts driver.RestoreOptions) error {
+	configPath, cleanup, err := writeURIConfig(e.cfg.Extra["uri"])
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
 	cmd := exec.CommandContext(ctx, "mongorestore",
-		"--uri="+e.cfg.Extra["uri"],
+		"--config="+configPath,
 		"--nsInclude="+opts.Database+".*",
 		"--archive",
 		"--drop",
@@ -103,7 +152,7 @@ func (e *Engine) Restore(ctx context.Context, opts driver.RestoreOptions) error 
 	cmd.Stderr = &stderr
 
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("mongorestore: %w: %s", err, stderr.String())
+		return fmt.Errorf("mongorestore: %w: %s", err, redactURI(stderr.String()))
 	}
 	return nil
 }
