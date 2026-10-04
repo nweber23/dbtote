@@ -6,7 +6,7 @@ Full design: [`docs/SPEC.md`](docs/SPEC.md).
 
 ## Status
 
-Phase 4: MySQL and PostgreSQL full backup/restore, local and S3 storage, gzip compression, age encryption, OS-keyring credentials, YAML config file with targets, `test-connection`, `list` (backed by a local SQLite metadata index), retention policy enforcement, Slack success/failure notifications, and CI/CD (gated releases, Docker image, keyless artifact signing, PR coverage comments).
+Phase 5: MySQL, PostgreSQL, SQLite, and MongoDB full backup/restore, local and S3 storage, gzip compression, age encryption, OS-keyring credentials, YAML config file with targets, `test-connection`, `list` (backed by a local SQLite metadata index), retention policy enforcement, Slack success/failure notifications, and CI/CD (gated releases, Docker image, keyless artifact signing, PR coverage comments).
 
 ## Install
 
@@ -30,7 +30,7 @@ cd dbtote
 go build -o bin/dbtote ./cmd/dbtote
 ```
 
-Requires the `mysqldump`/`mysql` client binaries on `PATH` for MySQL targets, and `pg_dump`/`pg_restore` for PostgreSQL targets.
+Requires the `mysqldump`/`mysql` client binaries on `PATH` for MySQL targets, `pg_dump`/`pg_restore` for PostgreSQL targets, and `mongodump`/`mongorestore` (from [MongoDB Database Tools](https://www.mongodb.com/try/download/database-tools)) for MongoDB targets. SQLite needs no external binary — it's backed up via SQLite's own `VACUUM INTO`, run through the pure-Go `modernc.org/sqlite` driver.
 
 ## Quick start
 
@@ -111,6 +111,34 @@ With a config file in place, `dbtote backup --target prod-mysql` and `dbtote res
 ### PostgreSQL
 
 Postgres is supported the same way MySQL is — set `engine: postgres` on a target. Requires the `pg_dump` and `pg_restore` client binaries on `PATH`.
+
+### SQLite and MongoDB
+
+SQLite targets use `path:` instead of `host`/`port`/`user`/`database`, and need no credential — there's no `password_env` or keyring entry to set up:
+
+```yaml
+targets:
+  local-sqlite:
+    engine: sqlite
+    path: /var/backups/app.db
+    storage: local-main
+```
+
+MongoDB targets use `uri_env:` — the name of an environment variable holding the full connection URI (including auth), never the URI itself in the config file:
+
+```yaml
+targets:
+  prod-mongo:
+    engine: mongodb
+    uri_env: MONGO_URI
+    database: app_production
+    storage: s3-main
+```
+
+```bash
+dbtote backup --target local-sqlite
+MONGO_URI=mongodb://user:pass@mongo.internal:27017 dbtote backup --target prod-mongo
+```
 
 ## S3 storage, retention, and notifications
 
