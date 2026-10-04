@@ -64,6 +64,15 @@ func (e *Engine) Backup(ctx context.Context, opts driver.BackupOptions) (driver.
 	}
 	defer db.Close()
 
+	// Without a busy timeout, SQLite's default is to fail a locked access
+	// immediately (SQLITE_BUSY) rather than wait — exactly the "concurrent
+	// writers" case this backup needs to tolerate. This makes VACUUM INTO
+	// retry for up to 5s instead of erroring the instant a writer holds
+	// the lock.
+	if _, err := db.ExecContext(ctx, "PRAGMA busy_timeout = 5000"); err != nil {
+		return driver.BackupResult{}, fmt.Errorf("sqlite: set busy_timeout: %w", err)
+	}
+
 	tmp, err := os.CreateTemp("", "dbtote-sqlite-backup-*.db")
 	if err != nil {
 		return driver.BackupResult{}, fmt.Errorf("sqlite: create temp file: %w", err)
