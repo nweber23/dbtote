@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+
 	"github.com/spf13/cobra"
 
 	"github.com/nweber23/dbtote/internal/config"
@@ -43,6 +45,15 @@ func resolveTarget(cmd *cobra.Command, target, host, user, database string, port
 	}
 
 	rt.Engine = t.Engine
+	if t.Path != "" {
+		rt.Connection.Database = t.Path
+	}
+	if t.URIEnv != "" {
+		if rt.Connection.Extra == nil {
+			rt.Connection.Extra = map[string]string{}
+		}
+		rt.Connection.Extra["uri"] = os.Getenv(t.URIEnv)
+	}
 	if !cmd.Flags().Changed("host") {
 		rt.Connection.Host = t.Host
 	}

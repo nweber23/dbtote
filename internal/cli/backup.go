@@ -60,18 +60,34 @@ func newBackupCommand() *cobra.Command {
 				return exitError{code: 2, err: fmt.Errorf("cli: --host, --user, and --database are required unless --target resolves them from config")}
 			}
 
-			password, err := secrets.ResolvePassword(ctx, secrets.NewKeyringStore(), secrets.ResolveOptions{
-				EnvVarName: rt.PasswordEnv,
-				KeyringKey: target,
-				Prompt:     promptForPassword,
-			})
-			if err != nil {
-				return exitError{code: 2, err: err}
+			needsPassword := rt.Engine != "sqlite" && rt.Engine != "mongodb"
+			var password string
+			if needsPassword {
+				var err error
+				password, err = secrets.ResolvePassword(ctx, secrets.NewKeyringStore(), secrets.ResolveOptions{
+					EnvVarName: rt.PasswordEnv,
+					KeyringKey: target,
+					Prompt:     promptForPassword,
+				})
+				if err != nil {
+					return exitError{code: 2, err: err}
+				}
 			}
 			rt.Connection.Password = password
 
-			if encrypt && len(rt.Recipients) == 0 {
-				return exitError{code: 2, err: fmt.Errorf("cli: --encrypt requires --recipient or encryption.recipients in config")}
+			switch rt.Engine {
+			case "sqlite":
+				if rt.Connection.Database == "" {
+					return exitError{code: 2, err: fmt.Errorf("cli: sqlite targets need --database (the .db file path) or a configured target")}
+				}
+			case "mongodb":
+				if rt.Connection.Database == "" || rt.Connection.Extra["uri"] == "" {
+					return exitError{code: 2, err: fmt.Errorf("cli: mongodb targets need --database and a configured uri_env, or a configured target")}
+				}
+			default:
+				if rt.Connection.Host == "" || rt.Connection.User == "" || rt.Connection.Database == "" {
+					return exitError{code: 2, err: fmt.Errorf("cli: --host, --user, and --database are required unless --target resolves them from config")}
+				}
 			}
 
 			dumpExt := "sql"
